@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <ctype.h>
+#include <string.h>
 #include <math.h>
 
 #include "raylib/raylib.h"
@@ -10,7 +11,10 @@
 //General settings
 #define PX_WIDTH 512
 #define DSP_RANGE 1.0//3.0
+
+//Formulas
 #define MAX_LOCAL_VARS 64
+#define MAX_FORMULA 4096
 
 //Vector settings
 #define DO_VECTORS
@@ -29,6 +33,9 @@
 
 
 
+char formula[MAX_FORMULA];
+
+
 bool GetDerivative(double t, double y, double *ret);
 bool GetDerivativeF(char *formula, double t, double y, double *ret);
 int TToPx(double spc);
@@ -42,9 +49,23 @@ int main(int argc, char *argv[])
 {
 	InitWindow(PX_WIDTH, PX_WIDTH, "Direction Field viewer");
 
-	//TODO: Parse formula
-	(void)argc;
-	(void)argv;
+	if (argc == 1)
+	{
+		//Default formula is exercise one
+		//(y + t) / (y - t)
+		strcpy(formula, "y>t+>y>t-[/");
+	}
+	else if (argc == 2)
+	{
+		//Accept formula
+		strcpy(formula, argv[1]);
+	}
+	else
+	{
+		//Invalid arguments
+		fprintf(stderr, "Invalid arguments. Use format:\n dfv [formula]\n");
+		return 1;
+	}
 
 	while (!WindowShouldClose())
 	{
@@ -67,7 +88,7 @@ int main(int argc, char *argv[])
 
 bool GetDerivative(double t, double y, double *ret)
 {
-	//double result = (t * y) / (1 + t * t); //b)
+	/*//double result = (t * y) / (1 + t * t); //b)
 	//double result = (2 - y) * (y - 1); //c)
 	double result = (y + t) / (y - t); //f)
 
@@ -76,7 +97,9 @@ bool GetDerivative(double t, double y, double *ret)
 	if (isfinite(result))
 		return true;
 
-	return false;
+	return false;*/
+
+	return GetDerivativeF(formula, t, y, ret);
 }
 
 bool GetDerivativeF(char *formula, double t, double y, double *ret)
@@ -247,8 +270,7 @@ void DrawVectors()
 		for (double y = -DSP_RANGE; y <= DSP_RANGE; y += VECTOR_STEP)
 		{
 			double a, x, v;
-			//bool valid = GetDerivative(t, y, &v);
-			bool valid = GetDerivativeF("y>t+>y>t-[/", t, y, &v);
+			bool valid = GetDerivative(t, y, &v);
 			a = atan(v);
 			x = cos(a) * VECTOR_LENGTH;
 			v = sin(a) * VECTOR_LENGTH;

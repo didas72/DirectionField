@@ -9,7 +9,7 @@ INC=include
 LIB=libs
 DEPS=raylib
 
-OUTBIN=$(BIN)/main
+OUTBIN=$(BIN)/dfv
 
 SRCS=$(wildcard $(SRC)/*.c)
 OBJS=$(patsubst $(SRC)/%.c, $(OBJ)/%.o, $(SRCS))
