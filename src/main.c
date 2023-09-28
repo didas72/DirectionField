@@ -17,15 +17,15 @@
 #define MAX_FORMULA 4096
 
 //Vector settings
-#define DO_VECTORS
+#define DRAW_VECTORS 0b1
 #define VECTOR_STEP 0.05//0.2
 #define VECTOR_LENGTH 0.02//0.1
 #define FLAT_MARGIN 0.05
 
 //Line settings
-//#define DO_CENTRAL_LINES
-#define DO_LEFT_EDGE_LINES
-#define DO_RIGHT_EDGE_LINES
+#define DRAW_CENTRAL_LINES 0b10
+#define DRAW_LEFT_EDGE_LINES 0b100
+#define DRAW_RIGHT_EDGE_LINES 0b1000
 #define LINE_SPACING 0.035//0.1
 #define LINE_STEP 0.001
 #define LINE_RANGE_EXTEND 20
@@ -34,6 +34,8 @@
 
 
 char formula[MAX_FORMULA];
+unsigned char drawFlags = DRAW_VECTORS | DRAW_LEFT_EDGE_LINES | DRAW_RIGHT_EDGE_LINES;
+
 
 
 bool GetDerivative(double t, double y, double *ret);
@@ -47,25 +49,38 @@ void DrawLines();
 
 int main(int argc, char *argv[])
 {
-	InitWindow(PX_WIDTH, PX_WIDTH, "Direction Field viewer");
+	printf("Started with %d args.\n", argc);
 
 	if (argc == 1)
 	{
 		//Default formula is exercise one
 		//(y + t) / (y - t)
+		printf("No arguments provided, loading default formula.\nUse format:\n dfv [formula] [drawFlags]\n");
 		strcpy(formula, "y>t+>y>t-[/");
 	}
 	else if (argc == 2)
 	{
 		//Accept formula
 		strcpy(formula, argv[1]);
+		printf("Loaded formula '%s'.\n", formula);
+	}
+	else if (argc == 3)
+	{
+		strcpy(formula, argv[1]);
+		printf("Loaded formula '%s'.\n", formula);
+		drawFlags = atoi(argv[2]);
+		printf("Loaded drawFlags %d.\n", drawFlags);
 	}
 	else
 	{
 		//Invalid arguments
-		fprintf(stderr, "Invalid arguments. Use format:\n dfv [formula]\n");
+		fprintf(stderr, "Invalid arguments. Use format:\n dfv [formula] [drawFlags]\n");
 		return 1;
 	}
+
+
+	SetTraceLogLevel(LOG_NONE);
+	InitWindow(PX_WIDTH, PX_WIDTH, "Direction Field viewer");
 
 	while (!WindowShouldClose())
 	{
@@ -75,13 +90,13 @@ int main(int argc, char *argv[])
 		DrawLine(PX_WIDTH / 2, 0, PX_WIDTH / 2, PX_WIDTH, GRAY);
 		DrawLine(0, PX_WIDTH / 2, PX_WIDTH, PX_WIDTH / 2, GRAY);
 
-		#ifdef DO_VECTORS
 		DrawVectors();
-		#endif
 		DrawLines();
 
 		EndDrawing();
 	}
+
+	CloseWindow();
 }
 
 
@@ -128,7 +143,6 @@ bool GetDerivativeF(char *formula, double t, double y, double *ret)
 	{
 		if (lastWasConstant)
 		{
-			printf("Cte\n");
 			lastWasConstant = false;
 			
 			switch (ch)
@@ -148,7 +162,6 @@ bool GetDerivativeF(char *formula, double t, double y, double *ret)
 
 		if (isdigit(ch))
 		{
-			printf("DIG\n");
 			if (!lastWasNum) { num = ch - '0'; }
 			else { num *= 10; num += ch - '0'; } //FIXME: Can only handle ints
 			continue;
@@ -157,7 +170,6 @@ bool GetDerivativeF(char *formula, double t, double y, double *ret)
 
 		if (isalpha(ch) && ch != 't' && ch != 'y')
 		{
-			printf("FUNC\n");
 			//TODO: Function name, append
 			continue;
 		}
@@ -265,6 +277,9 @@ int VToPx(double spc)
 
 void DrawVectors()
 {
+	if (!(drawFlags & DRAW_VECTORS))
+		return;
+
 	for (double t = -DSP_RANGE; t <= DSP_RANGE; t += VECTOR_STEP)
 	{
 		for (double y = -DSP_RANGE; y <= DSP_RANGE; y += VECTOR_STEP)
@@ -299,84 +314,87 @@ void DrawLines()
 
 	for (double y = -DSP_RANGE - LINE_RANGE_EXTEND; y <= DSP_RANGE + LINE_RANGE_EXTEND; y += LINE_SPACING)
 	{
-		#ifdef DO_CENTRAL_LINES
-		//Start point is (0, y) to +t
-		curV = y;
-
-		for (double t = LINE_STEP; t <= DSP_RANGE + LINE_STEP; t += LINE_STEP)
+		if (drawFlags & DRAW_CENTRAL_LINES)
 		{
-			double nextV;
-			if (!GetDerivative(t - LINE_STEP, curV, &nextV))
-				break;
-			nextV = nextV * LINE_STEP + curV;
-			
-			if (fabs(curV) <= DSP_RANGE && fabs(nextV) <= DSP_RANGE)
-				DrawLine(TToPx(t - LINE_STEP), VToPx(curV),
-					TToPx(t), VToPx(nextV), BLUE);
+			//Start point is (0, y) to +t
+			curV = y;
 
-			curV = nextV;
+			for (double t = LINE_STEP; t <= DSP_RANGE + LINE_STEP; t += LINE_STEP)
+			{
+				double nextV;
+				if (!GetDerivative(t - LINE_STEP, curV, &nextV))
+					break;
+				nextV = nextV * LINE_STEP + curV;
+				
+				if (fabs(curV) <= DSP_RANGE && fabs(nextV) <= DSP_RANGE)
+					DrawLine(TToPx(t - LINE_STEP), VToPx(curV),
+						TToPx(t), VToPx(nextV), BLUE);
+
+				curV = nextV;
+			}
+
+			//Start point is (0, y) to -t
+			curV = y;
+
+			for (double t = 0; t >= -DSP_RANGE - LINE_STEP; t -= LINE_STEP)
+			{
+				double nextV;
+				if (!GetDerivative(t - LINE_STEP, curV, &nextV))
+					break;
+				nextV = curV - nextV * LINE_STEP;
+				
+				if (fabs(curV) <= DSP_RANGE && fabs(nextV) <= DSP_RANGE)
+					DrawLine(TToPx(t - LINE_STEP), VToPx(nextV),
+						TToPx(t), VToPx(curV), BLUE);
+
+				curV = nextV;
+			}
 		}
 
-		//Start point is (0, y) to -t
-		curV = y;
-
-		for (double t = 0; t >= -DSP_RANGE - LINE_STEP; t -= LINE_STEP)
+		if (drawFlags & DRAW_RIGHT_EDGE_LINES)
 		{
-			double nextV;
-			if (!GetDerivative(t - LINE_STEP, curV, &nextV))
-				break;
-			nextV = curV - nextV * LINE_STEP;
-			
-			if (fabs(curV) <= DSP_RANGE && fabs(nextV) <= DSP_RANGE)
-				DrawLine(TToPx(t - LINE_STEP), VToPx(nextV),
-					TToPx(t), VToPx(curV), BLUE);
+			//Start point is (DSP_RANGE, y) to 0
+			curV = y;
 
-			curV = nextV;
+			for (double t = DSP_RANGE + LINE_STEP; t >= 0; t -= LINE_STEP)
+			{
+				double nextV;
+				if (!GetDerivative(t - LINE_STEP, curV, &nextV))
+					break;
+
+				if (fabs(nextV) > MAX_DERIV)
+					break;			
+				nextV = curV - nextV * LINE_STEP;
+				
+				if (fabs(curV) <= DSP_RANGE && fabs(nextV) <= DSP_RANGE)
+					DrawLine(TToPx(t - LINE_STEP), VToPx(nextV),
+						TToPx(t), VToPx(curV), ORANGE);
+
+				curV = nextV;
+			}
 		}
-		#endif
 
-		#ifdef DO_RIGHT_EDGE_LINES
-		//Start point is (DSP_RANGE, y) to 0
-		curV = y;
-
-		for (double t = DSP_RANGE + LINE_STEP; t >= 0; t -= LINE_STEP)
+		if (drawFlags & DRAW_LEFT_EDGE_LINES)
 		{
-			double nextV;
-			if (!GetDerivative(t - LINE_STEP, curV, &nextV))
-				break;
+			//Start  point is (-DSP_RANGE, y) to 0
+			curV = y;
 
-			if (fabs(nextV) > MAX_DERIV)
-				break;			
-			nextV = curV - nextV * LINE_STEP;
-			
-			if (fabs(curV) <= DSP_RANGE && fabs(nextV) <= DSP_RANGE)
-				DrawLine(TToPx(t - LINE_STEP), VToPx(nextV),
-					TToPx(t), VToPx(curV), ORANGE);
+			for (double t = -DSP_RANGE - LINE_STEP; t <= 0; t += LINE_STEP)
+			{
+				double nextV;
+				if (!GetDerivative(t - LINE_STEP, curV, &nextV))
+					break;
 
-			curV = nextV;
+				if (fabs(nextV) > MAX_DERIV)
+					break;	
+				nextV = nextV * LINE_STEP + curV;
+				
+				if (fabs(curV) <= DSP_RANGE && fabs(nextV) <= DSP_RANGE)
+					DrawLine(TToPx(t - LINE_STEP), VToPx(curV),
+						TToPx(t), VToPx(nextV), VIOLET);
+
+				curV = nextV;
+			}
 		}
-		#endif
-
-		#ifdef DO_LEFT_EDGE_LINES
-		//Start  point is (-DSP_RANGE, y) to 0
-		curV = y;
-
-		for (double t = -DSP_RANGE - LINE_STEP; t <= 0; t += LINE_STEP)
-		{
-			double nextV;
-			if (!GetDerivative(t - LINE_STEP, curV, &nextV))
-				break;
-
-			if (fabs(nextV) > MAX_DERIV)
-				break;	
-			nextV = nextV * LINE_STEP + curV;
-			
-			if (fabs(curV) <= DSP_RANGE && fabs(nextV) <= DSP_RANGE)
-				DrawLine(TToPx(t - LINE_STEP), VToPx(curV),
-					TToPx(t), VToPx(nextV), VIOLET);
-
-			curV = nextV;
-		}
-		#endif
 	}
 }
