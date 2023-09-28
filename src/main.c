@@ -6,17 +6,26 @@
 
 #include "raylib/raylib.h"
 
+//General settings
 #define PX_WIDTH 512
-#define DSP_RANGE 1.0
-#define VECTOR_STEP 0.05
-#define VECTOR_LENGTH 0.02
+#define DSP_RANGE 1.0//3.0
 
-#define LINE_SPACING 0.03
-#define LINE_STEP 0.002
-#define LINE_RANGE_EXTEND 20
-#define MAX_DERIV 20
-
+//Vector settings
+#define DO_VECTORS
+#define VECTOR_STEP 0.05//0.2
+#define VECTOR_LENGTH 0.02//0.1
 #define FLAT_MARGIN 0.05
+
+//Line settings
+//#define DO_CENTRAL_LINES
+#define DO_LEFT_EDGE_LINES
+#define DO_RIGHT_EDGE_LINES
+#define LINE_SPACING 0.035//0.1
+#define LINE_STEP 0.001
+#define LINE_RANGE_EXTEND 20
+#define MAX_DERIV 50
+
+
 
 bool GetDerivative(double t, double y, double *ret);
 int TToPx(double spc);
@@ -38,7 +47,9 @@ int main(int argc, char *argv[])
 		DrawLine(PX_WIDTH / 2, 0, PX_WIDTH / 2, PX_WIDTH, GRAY);
 		DrawLine(0, PX_WIDTH / 2, PX_WIDTH, PX_WIDTH / 2, GRAY);
 
+		#ifdef DO_VECTORS
 		DrawVectors();
+		#endif
 		DrawLines();
 
 		EndDrawing();
@@ -47,7 +58,9 @@ int main(int argc, char *argv[])
 
 bool GetDerivative(double t, double y, double *ret)
 {
-	double result = (y + t) / (y - t);
+	//double result = (t * y) / (1 + t * t); //b)
+	//double result = (2 - y) * (y - 1); //c)
+	double result = (y + t) / (y - t); //f)
 
 	*ret = result;
 
@@ -98,12 +111,14 @@ void DrawVectors()
 
 void DrawLines()
 {
+	double curV;
+
 	for (double y = -DSP_RANGE - LINE_RANGE_EXTEND; y <= DSP_RANGE + LINE_RANGE_EXTEND; y += LINE_SPACING)
 	{
+		#ifdef DO_CENTRAL_LINES
 		//Start point is (0, y) to +t
-		double curV = y;
+		curV = y;
 
-		/*
 		for (double t = LINE_STEP; t <= DSP_RANGE + LINE_STEP; t += LINE_STEP)
 		{
 			double nextV;
@@ -134,8 +149,9 @@ void DrawLines()
 
 			curV = nextV;
 		}
-		*/
+		#endif
 
+		#ifdef DO_RIGHT_EDGE_LINES
 		//Start point is (DSP_RANGE, y) to 0
 		curV = y;
 
@@ -155,7 +171,9 @@ void DrawLines()
 
 			curV = nextV;
 		}
-	
+		#endif
+
+		#ifdef DO_LEFT_EDGE_LINES
 		//Start  point is (-DSP_RANGE, y) to 0
 		curV = y;
 
@@ -175,5 +193,6 @@ void DrawLines()
 
 			curV = nextV;
 		}
+		#endif
 	}
 }
