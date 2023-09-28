@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <ctype.h>
 #include <math.h>
 
 #include "raylib/raylib.h"
@@ -9,6 +10,7 @@
 //General settings
 #define PX_WIDTH 512
 #define DSP_RANGE 1.0//3.0
+#define MAX_LOCAL_VARS 64
 
 //Vector settings
 #define DO_VECTORS
@@ -28,16 +30,21 @@
 
 
 bool GetDerivative(double t, double y, double *ret);
+bool GetDerivativeF(char *formula, double t, double y, double *ret);
 int TToPx(double spc);
 int VToPx(double spc);
 void DrawVectors();
 void DrawLines();
+
+
 
 int main(int argc, char *argv[])
 {
 	InitWindow(PX_WIDTH, PX_WIDTH, "Direction Field viewer");
 
 	//TODO: Parse formula
+	(void)argc;
+	(void)argv;
 
 	while (!WindowShouldClose())
 	{
@@ -56,6 +63,8 @@ int main(int argc, char *argv[])
 	}
 }
 
+
+
 bool GetDerivative(double t, double y, double *ret)
 {
 	//double result = (t * y) / (1 + t * t); //b)
@@ -69,6 +78,158 @@ bool GetDerivative(double t, double y, double *ret)
 
 	return false;
 }
+
+bool GetDerivativeF(char *formula, double t, double y, double *ret)
+{
+	// ^ pow(2)
+	// { sqrt(1)
+	// $ log(1)
+	// # abs(1)
+	//Maybe factorial
+
+	//Shorthands:
+	// ( sin(1)
+	// ) cos(1)
+	// \ tan(1)
+
+	double vars[MAX_LOCAL_VARS], num;
+	int varHead = 0;
+	int fHead = 0;
+
+	char ch;
+	bool lastWasNum = false, lastWasConstant = false;
+
+	//TODO: Verify valid ops (sqrt(-1), /0, etc)
+
+	while ((ch = formula[fHead++]))
+	{
+		if (lastWasConstant)
+		{
+			printf("Cte\n");
+			lastWasConstant = false;
+			
+			switch (ch)
+			{
+				case 'e':
+					vars[varHead] = M_E;
+					break;
+
+				case 'P':
+					vars[varHead] = M_PI;
+					break;
+
+				default:
+					break; //TODO: Err
+			}
+		}
+
+		if (isdigit(ch))
+		{
+			printf("DIG\n");
+			if (!lastWasNum) { num = ch - '0'; }
+			else { num *= 10; num += ch - '0'; } //FIXME: Can only handle ints
+			continue;
+		}
+		else lastWasNum = false;
+
+		if (isalpha(ch) && ch != 't' && ch != 'y')
+		{
+			printf("FUNC\n");
+			//TODO: Function name, append
+			continue;
+		}
+
+		switch (ch)
+		{
+			case '_':
+				lastWasConstant = true;
+				break;
+
+			case 't':
+				vars[varHead] = t;
+				break;
+
+			case 'y':
+				vars[varHead] = y;
+				break;
+
+			case '<':
+				varHead--; //TODO: Error if underflow
+				break;
+
+			case '>':
+				varHead++; //TODO: Error if overflow
+				break;
+
+			case ']':
+				vars[varHead + 1] = vars[varHead];
+				varHead++; //TODO: Error if overflow
+				break;
+
+			case '[':
+				vars[varHead - 1] = vars[varHead];
+				varHead--; //TODO: Error if overflow
+				break;
+
+			case '+':
+				vars[varHead] = vars[varHead - 1] + vars[varHead];
+				break;
+
+			case '-':
+				vars[varHead] = vars[varHead - 1] - vars[varHead];
+				break;
+
+			case '*':
+				vars[varHead] = vars[varHead - 1] * vars[varHead];
+				break;
+
+			case '/':
+				if (vars[varHead] == 0) return false;
+				vars[varHead] = vars[varHead - 1] / vars[varHead];
+				break;
+
+			case '^':
+				vars[varHead] = pow(vars[varHead - 1], vars[varHead]);
+				break;
+
+			case '{':
+				if (vars[varHead] < 0) return false;
+				vars[varHead] = sqrt(vars[varHead]);
+				break;
+
+			case '$':
+				if (vars[varHead] <= 0) return false;
+				vars[varHead] = log(vars[varHead]);
+				break;
+
+			case '#':
+				vars[varHead] = fabs(vars[varHead]);
+				break;
+
+			case '(':
+				vars[varHead] = sin(vars[varHead]);
+				break;
+
+			case ')':
+				vars[varHead] = cos(vars[varHead]);
+				break;
+
+			case '\\':
+				vars[varHead] = tan(vars[varHead]);
+				break;
+
+			default:
+				printf("ERR: %c\n", ch);
+				break;
+		}
+	}
+
+	*ret = vars[varHead];
+
+	return true;
+}
+
+
 
 int TToPx(double spc)
 {
@@ -86,7 +247,8 @@ void DrawVectors()
 		for (double y = -DSP_RANGE; y <= DSP_RANGE; y += VECTOR_STEP)
 		{
 			double a, x, v;
-			bool valid = GetDerivative(t, y, &v);
+			//bool valid = GetDerivative(t, y, &v);
+			bool valid = GetDerivativeF("y>t+>y>t-[/", t, y, &v);
 			a = atan(v);
 			x = cos(a) * VECTOR_LENGTH;
 			v = sin(a) * VECTOR_LENGTH;
