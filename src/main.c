@@ -22,8 +22,8 @@
 
 //Vector settings
 #define DRAW_VECTORS 0b1
-#define VECTOR_STEP 0.05//0.2
-#define VECTOR_LENGTH 0.02//0.1
+#define VECTOR_STEP 0.05
+#define VECTOR_LENGTH 0.02
 #define UNDEF_RADIUS 2.0
 #define FLAT_MARGIN 0.05
 
@@ -31,7 +31,7 @@
 #define DRAW_CENTRAL_LINES 0b10
 #define DRAW_LEFT_EDGE_LINES 0b100
 #define DRAW_RIGHT_EDGE_LINES 0b1000
-#define LINE_SPACING 0.035//0.1
+#define LINE_SPACING 0.035
 #define LINE_STEP 0.001
 #define LINE_RANGE_EXTEND 20
 #define MAX_DERIV 50
@@ -54,6 +54,7 @@ int TToPx(double spc);
 int VToPx(double spc);
 void DrawVectors();
 void DrawLines();
+void PlotResult(double bottom, double top, double spacing, double left, double right, double step, Color color);
 
 
 
@@ -386,91 +387,48 @@ void DrawVectors()
 
 void DrawLines()
 {
-	double curV;
-
-	for (double y = -_dspRange - LINE_RANGE_EXTEND; y <= _dspRange + LINE_RANGE_EXTEND; y += LINE_SPACING)
+	if (_drawFlags & DRAW_CENTRAL_LINES)
 	{
-		if (_drawFlags & DRAW_CENTRAL_LINES)
+		PlotResult(-_dspRange - LINE_RANGE_EXTEND, _dspRange + LINE_RANGE_EXTEND, LINE_SPACING,
+			LINE_STEP, _dspRange + LINE_STEP, LINE_STEP, SKYBLUE);
+		PlotResult(-_dspRange - LINE_RANGE_EXTEND, _dspRange + LINE_RANGE_EXTEND, LINE_SPACING,
+			0, -_dspRange - LINE_STEP, LINE_STEP, SKYBLUE);
+	}
+	if (_drawFlags & DRAW_RIGHT_EDGE_LINES)
+		PlotResult(-_dspRange - LINE_RANGE_EXTEND, _dspRange + LINE_RANGE_EXTEND, LINE_SPACING,
+			_dspRange + LINE_STEP, 0, LINE_STEP, ORANGE);
+	if (_drawFlags & DRAW_LEFT_EDGE_LINES)
+		PlotResult(-_dspRange - LINE_RANGE_EXTEND, _dspRange + LINE_RANGE_EXTEND, LINE_SPACING,
+			-_dspRange - LINE_STEP, 0, LINE_STEP, VIOLET);
+
+	return;
+}
+
+void PlotResult(double bottom, double top, double spacing, double start, double end, double step, Color color)
+{
+	bool leftToRight = start < end;
+	double s = step * (leftToRight ? 1 : -1);
+
+	for (double y = bottom; y <= top; y += spacing)
+	{
+		double curV = y;
+
+		for (double t = start; leftToRight ? t <= end : t >= end; t += s)
 		{
-			//Start point is (0, y) to +t
-			curV = y;
+			double nextV;
+			if (!GetDerivative(t - s, curV, &nextV))
+				break;
 
-			for (double t = LINE_STEP; t <= _dspRange + LINE_STEP; t += LINE_STEP)
-			{
-				double nextV;
-				if (!GetDerivative(t - LINE_STEP, curV, &nextV))
-					break;
-				nextV = nextV * LINE_STEP + curV;
-				
-				if (fabs(curV) <= _dspRange && fabs(nextV) <= _dspRange)
-					DrawLine(TToPx(t - LINE_STEP), VToPx(curV),
-						TToPx(t), VToPx(nextV), BLUE);
-
-				curV = nextV;
-			}
-
-			//Start point is (0, y) to -t
-			curV = y;
-
-			for (double t = 0; t >= -_dspRange - LINE_STEP; t -= LINE_STEP)
-			{
-				double nextV;
-				if (!GetDerivative(t - LINE_STEP, curV, &nextV))
-					break;
-				nextV = curV - nextV * LINE_STEP;
-				
-				if (fabs(curV) <= _dspRange && fabs(nextV) <= _dspRange)
-					DrawLine(TToPx(t - LINE_STEP), VToPx(nextV),
-						TToPx(t), VToPx(curV), BLUE);
-
-				curV = nextV;
-			}
-		}
-
-		if (_drawFlags & DRAW_RIGHT_EDGE_LINES)
-		{
-			//Start point is (DSP_RANGE, y) to 0
-			curV = y;
-
-			for (double t = _dspRange + LINE_STEP; t >= 0; t -= LINE_STEP)
-			{
-				double nextV;
-				if (!GetDerivative(t - LINE_STEP, curV, &nextV))
-					break;
-
-				if (fabs(nextV) > MAX_DERIV)
-					break;			
-				nextV = curV - nextV * LINE_STEP;
-				
-				if (fabs(curV) <= _dspRange && fabs(nextV) <= _dspRange)
-					DrawLine(TToPx(t - LINE_STEP), VToPx(nextV),
-						TToPx(t), VToPx(curV), ORANGE);
-
-				curV = nextV;
-			}
-		}
-
-		if (_drawFlags & DRAW_LEFT_EDGE_LINES)
-		{
-			//Start  point is (-DSP_RANGE, y) to 0
-			curV = y;
-
-			for (double t = -_dspRange - LINE_STEP; t <= 0; t += LINE_STEP)
-			{
-				double nextV;
-				if (!GetDerivative(t - LINE_STEP, curV, &nextV))
-					break;
-
-				if (fabs(nextV) > MAX_DERIV)
+			//derivative limiter
+			if (fabs(nextV) > MAX_DERIV)
 					break;	
-				nextV = nextV * LINE_STEP + curV;
-				
-				if (fabs(curV) <= _dspRange && fabs(nextV) <= _dspRange)
-					DrawLine(TToPx(t - LINE_STEP), VToPx(curV),
-						TToPx(t), VToPx(nextV), VIOLET);
+			nextV = nextV * s + curV;
+			
+			if (fabs(curV) <= _dspRange && fabs(nextV) <= _dspRange)
+				DrawLine(TToPx(t - s), VToPx(curV),
+					TToPx(t), VToPx(nextV), color);
 
-				curV = nextV;
-			}
+			curV = nextV;
 		}
 	}
 }
