@@ -207,14 +207,13 @@ bool GetDerivativeF(char *formula, double t, double y, double *ret)
 	// ) cos(1)
 	// \ tan(1)
 
-	double vars[MAX_LOCAL_VARS], num;
+	double vars[MAX_LOCAL_VARS], num, clip;
 	int varHead = 0;
 	int fHead = 0;
+	int decimalCounter = -1;
 
 	char ch;
 	bool lastWasNum = false, lastWasConstant = false;
-
-	//TODO: Verify valid ops (sqrt(-1), /0, etc)
 
 	while ((ch = formula[fHead++]))
 	{
@@ -241,9 +240,23 @@ bool GetDerivativeF(char *formula, double t, double y, double *ret)
 		{
 			if (!lastWasNum) { num = ch - '0'; }
 			else { num *= 10; num += ch - '0'; } //FIXME: Can only handle ints
+			if (decimalCounter != -1) decimalCounter++;
 			continue;
 		}
-		else lastWasNum = false;
+		else if (ch == '.')
+		{
+			decimalCounter = 0;
+			continue;;
+		}
+		else
+		{
+			//TODO: Store number
+			while(decimalCounter--) num /= 10.0;
+
+			vars[varHead] = num;
+			lastWasNum = false;
+			decimalCounter = -1;
+		}
 
 		if (isalpha(ch) && ch != 't' && ch != 'y')
 		{
@@ -255,6 +268,14 @@ bool GetDerivativeF(char *formula, double t, double y, double *ret)
 		{
 			case '_':
 				lastWasConstant = true;
+				break;
+
+			case ',':
+				clip = vars[varHead];
+				break;
+
+			case ';':
+				vars[varHead] = clip;
 				break;
 
 			case 't':
