@@ -4,13 +4,17 @@
 #include <stdbool.h>
 #include <ctype.h>
 #include <string.h>
+#include <getopt.h>
 #include <math.h>
+#include <errno.h>
 
 #include "raylib/raylib.h"
 
-//General settings
-#define PX_WIDTH 512
-#define DSP_RANGE 1.0//3.0
+//Default settings
+#define DEFAULT_FORMULA "y>t+>y>t-[/"
+#define DEFAULT_PX_WIDTH 512
+#define DEFAULT_DRAW_FLAGS DRAW_VECTORS | DRAW_LEFT_EDGE_LINES | DRAW_RIGHT_EDGE_LINES
+#define DEFAULT_DSP_RANGE 1.0
 
 //Formulas
 #define MAX_LOCAL_VARS 64
@@ -20,6 +24,7 @@
 #define DRAW_VECTORS 0b1
 #define VECTOR_STEP 0.05//0.2
 #define VECTOR_LENGTH 0.02//0.1
+#define UNDEF_RADIUS 2.0
 #define FLAT_MARGIN 0.05
 
 //Line settings
@@ -33,11 +38,16 @@
 
 
 
-char formula[MAX_FORMULA];
-unsigned char drawFlags = DRAW_VECTORS | DRAW_LEFT_EDGE_LINES | DRAW_RIGHT_EDGE_LINES;
+//Settings
+char _formula[MAX_FORMULA + 1];
+unsigned char _drawFlags;
+int _pxWidth;
+double _dspRange;
 
 
 
+int ParseArgs(int argc, char *argv[]);
+void WriteUsageMessage();
 bool GetDerivative(double t, double y, double *ret);
 bool GetDerivativeF(char *formula, double t, double y, double *ret);
 int TToPx(double spc);
@@ -49,46 +59,19 @@ void DrawLines();
 
 int main(int argc, char *argv[])
 {
-	printf("Started with %d args.\n", argc);
-
-	if (argc == 1)
-	{
-		//Default formula is exercise one
-		//(y + t) / (y - t)
-		printf("No arguments provided, loading default formula.\nUse format:\n dfv [formula] [drawFlags]\n");
-		strcpy(formula, "y>t+>y>t-[/");
-	}
-	else if (argc == 2)
-	{
-		//Accept formula
-		strcpy(formula, argv[1]);
-		printf("Loaded formula '%s'.\n", formula);
-	}
-	else if (argc == 3)
-	{
-		strcpy(formula, argv[1]);
-		printf("Loaded formula '%s'.\n", formula);
-		drawFlags = atoi(argv[2]);
-		printf("Loaded drawFlags %d.\n", drawFlags);
-	}
-	else
-	{
-		//Invalid arguments
-		fprintf(stderr, "Invalid arguments. Use format:\n dfv [formula] [drawFlags]\n");
-		return 1;
-	}
-
+	int ret = ParseArgs(argc, argv);
+	if (ret) return ret;
 
 	SetTraceLogLevel(LOG_NONE);
-	InitWindow(PX_WIDTH, PX_WIDTH, "Direction Field viewer");
+	InitWindow(_pxWidth, _pxWidth, "Direction Field viewer");
 
 	while (!WindowShouldClose())
 	{
 		ClearBackground(BLACK);
 		BeginDrawing();
 
-		DrawLine(PX_WIDTH / 2, 0, PX_WIDTH / 2, PX_WIDTH, GRAY);
-		DrawLine(0, PX_WIDTH / 2, PX_WIDTH, PX_WIDTH / 2, GRAY);
+		DrawLine(_pxWidth / 2, 0, _pxWidth / 2, _pxWidth, GRAY);
+		DrawLine(0, _pxWidth / 2, _pxWidth, _pxWidth / 2, GRAY);
 
 		DrawVectors();
 		DrawLines();
@@ -97,6 +80,99 @@ int main(int argc, char *argv[])
 	}
 
 	CloseWindow();
+}
+
+int ParseArgs(int argc, char *argv[])
+{
+	int opt, optId;
+
+	//Init defaults
+	_drawFlags = DEFAULT_DRAW_FLAGS;
+	_pxWidth = DEFAULT_PX_WIDTH;
+	_dspRange = DEFAULT_DSP_RANGE;
+	strcpy(_formula, DEFAULT_FORMULA);
+
+	static struct option long_options[] = {
+		{"help",	no_argument,		NULL, 'h'},
+		{"formula",	required_argument,	NULL, 'f'},
+		{"display",	required_argument,	NULL, 'd'},
+		{"width",	required_argument,	NULL, 'w'},
+		{"range",	required_argument,	NULL, 'r'}
+	};
+
+	//TODO: Variable vector spacing (VECTOR_STEP)
+	//TODO: Variable line spacing (LINE_SPACING)
+	//TODO: Variables for other macros
+
+	while ((opt = getopt_long(argc, argv, "hf:d:w:r:", long_options, &optId)) != -1)
+	{
+		switch(opt)
+		{
+			case 'h':
+				WriteUsageMessage();
+				break;
+
+			case 'f':
+				if (strlen(optarg) > MAX_FORMULA)
+				{
+					fprintf(stderr, "Formula is too long. Max allowed length is %d.\n", MAX_FORMULA);
+					return -1;
+				}
+				strcpy(_formula, optarg);
+				printf("Loaded formula '%s'.\n", _formula);
+				break;
+
+			case 'd':
+				int drawFlags = strtol(optarg, NULL, 10);
+				if (errno || drawFlags < 0 || drawFlags > 15)
+				{
+					fprintf(stderr, "Invalid draw flags '%s'. Must be an integer between 0 and 15 inclusive.\n", optarg);
+					return -1;
+				}
+				
+				_drawFlags = drawFlags;
+				break;
+
+			case 'w':
+				int pxWidth = strtol(optarg, NULL, 10);
+				if (errno || pxWidth < 1 || pxWidth > 4096)
+				{
+					fprintf(stderr, "Invalid width '%s'. Must be an integer between 1 and 4096 inclusive.\n", optarg);
+					return -1;
+				}
+				
+				_pxWidth = pxWidth;
+				break;
+
+			case 'r':
+				double dspRange = strtod(optarg, NULL);
+				if (errno || dspRange < 0.001 || dspRange > 1000)
+				{
+					fprintf(stderr, "Invalid display range '%s'. Must be an number between 0.001 and 1000 inclusive.\n", optarg);
+					return -1;
+				}
+
+				_dspRange = dspRange;
+				break;
+
+			case '?':
+				//getopt_long already wrote error message
+				WriteUsageMessage();
+				return -1;
+		}
+	}
+
+	return 0;
+}
+
+void WriteUsageMessage()
+{
+	printf("CLI usage:\n\tdfv [options]\n\nOptions:\n"
+		"\t-h, --help\n\t\tShows usage message.\n"
+		"\t-f, --formula <formula>\n\t\tSpecifies the formula to be used during derivative calculation.\n"
+		"\t-d, --draw <mode>\n\t\tSpecifies what draw mode to use. Calculate by adding the requested flags: 1=vectors, 2=central, 4=left, 8=right\n"
+		"\t-w, --width <width>\n\t\tSpecifies what the window width should be. The window is aways square. Must be between 1 and 4096 inclusive.\n"
+		"\t-r, --range <range>\n\t\tSpecifies what number range to use when drawing. Interval will be [-range,range]. Must be between 0.001 and 1000.\n");
 }
 
 
@@ -114,7 +190,7 @@ bool GetDerivative(double t, double y, double *ret)
 
 	return false;*/
 
-	return GetDerivativeF(formula, t, y, ret);
+	return GetDerivativeF(_formula, t, y, ret);
 }
 
 bool GetDerivativeF(char *formula, double t, double y, double *ret)
@@ -268,21 +344,21 @@ bool GetDerivativeF(char *formula, double t, double y, double *ret)
 
 int TToPx(double spc)
 {
-	return (int)round((PX_WIDTH / 2) + spc * (PX_WIDTH / DSP_RANGE) * 0.5);
+	return (int)round((_pxWidth / 2) + spc * (_pxWidth / _dspRange) * 0.5);
 }
 int VToPx(double spc)
 {
-	return (int)round((PX_WIDTH / 2) - spc * (PX_WIDTH / DSP_RANGE) * 0.5);
+	return (int)round((_pxWidth / 2) - spc * (_pxWidth / _dspRange) * 0.5);
 }
 
 void DrawVectors()
 {
-	if (!(drawFlags & DRAW_VECTORS))
+	if (!(_drawFlags & DRAW_VECTORS))
 		return;
 
-	for (double t = -DSP_RANGE; t <= DSP_RANGE; t += VECTOR_STEP)
+	for (double t = -_dspRange; t <= _dspRange; t += VECTOR_STEP)
 	{
-		for (double y = -DSP_RANGE; y <= DSP_RANGE; y += VECTOR_STEP)
+		for (double y = -_dspRange; y <= _dspRange; y += VECTOR_STEP)
 		{
 			double a, x, v;
 			bool valid = GetDerivative(t, y, &v);
@@ -302,7 +378,7 @@ void DrawVectors()
 			}
 			else
 			{
-				DrawCircle(cornerX, cornerY, 2.0, RED);
+				DrawCircle(cornerX, cornerY, UNDEF_RADIUS, RED);
 			}
 		}
 	}
@@ -312,21 +388,21 @@ void DrawLines()
 {
 	double curV;
 
-	for (double y = -DSP_RANGE - LINE_RANGE_EXTEND; y <= DSP_RANGE + LINE_RANGE_EXTEND; y += LINE_SPACING)
+	for (double y = -_dspRange - LINE_RANGE_EXTEND; y <= _dspRange + LINE_RANGE_EXTEND; y += LINE_SPACING)
 	{
-		if (drawFlags & DRAW_CENTRAL_LINES)
+		if (_drawFlags & DRAW_CENTRAL_LINES)
 		{
 			//Start point is (0, y) to +t
 			curV = y;
 
-			for (double t = LINE_STEP; t <= DSP_RANGE + LINE_STEP; t += LINE_STEP)
+			for (double t = LINE_STEP; t <= _dspRange + LINE_STEP; t += LINE_STEP)
 			{
 				double nextV;
 				if (!GetDerivative(t - LINE_STEP, curV, &nextV))
 					break;
 				nextV = nextV * LINE_STEP + curV;
 				
-				if (fabs(curV) <= DSP_RANGE && fabs(nextV) <= DSP_RANGE)
+				if (fabs(curV) <= _dspRange && fabs(nextV) <= _dspRange)
 					DrawLine(TToPx(t - LINE_STEP), VToPx(curV),
 						TToPx(t), VToPx(nextV), BLUE);
 
@@ -336,14 +412,14 @@ void DrawLines()
 			//Start point is (0, y) to -t
 			curV = y;
 
-			for (double t = 0; t >= -DSP_RANGE - LINE_STEP; t -= LINE_STEP)
+			for (double t = 0; t >= -_dspRange - LINE_STEP; t -= LINE_STEP)
 			{
 				double nextV;
 				if (!GetDerivative(t - LINE_STEP, curV, &nextV))
 					break;
 				nextV = curV - nextV * LINE_STEP;
 				
-				if (fabs(curV) <= DSP_RANGE && fabs(nextV) <= DSP_RANGE)
+				if (fabs(curV) <= _dspRange && fabs(nextV) <= _dspRange)
 					DrawLine(TToPx(t - LINE_STEP), VToPx(nextV),
 						TToPx(t), VToPx(curV), BLUE);
 
@@ -351,12 +427,12 @@ void DrawLines()
 			}
 		}
 
-		if (drawFlags & DRAW_RIGHT_EDGE_LINES)
+		if (_drawFlags & DRAW_RIGHT_EDGE_LINES)
 		{
 			//Start point is (DSP_RANGE, y) to 0
 			curV = y;
 
-			for (double t = DSP_RANGE + LINE_STEP; t >= 0; t -= LINE_STEP)
+			for (double t = _dspRange + LINE_STEP; t >= 0; t -= LINE_STEP)
 			{
 				double nextV;
 				if (!GetDerivative(t - LINE_STEP, curV, &nextV))
@@ -366,7 +442,7 @@ void DrawLines()
 					break;			
 				nextV = curV - nextV * LINE_STEP;
 				
-				if (fabs(curV) <= DSP_RANGE && fabs(nextV) <= DSP_RANGE)
+				if (fabs(curV) <= _dspRange && fabs(nextV) <= _dspRange)
 					DrawLine(TToPx(t - LINE_STEP), VToPx(nextV),
 						TToPx(t), VToPx(curV), ORANGE);
 
@@ -374,12 +450,12 @@ void DrawLines()
 			}
 		}
 
-		if (drawFlags & DRAW_LEFT_EDGE_LINES)
+		if (_drawFlags & DRAW_LEFT_EDGE_LINES)
 		{
 			//Start  point is (-DSP_RANGE, y) to 0
 			curV = y;
 
-			for (double t = -DSP_RANGE - LINE_STEP; t <= 0; t += LINE_STEP)
+			for (double t = -_dspRange - LINE_STEP; t <= 0; t += LINE_STEP)
 			{
 				double nextV;
 				if (!GetDerivative(t - LINE_STEP, curV, &nextV))
@@ -389,7 +465,7 @@ void DrawLines()
 					break;	
 				nextV = nextV * LINE_STEP + curV;
 				
-				if (fabs(curV) <= DSP_RANGE && fabs(nextV) <= DSP_RANGE)
+				if (fabs(curV) <= _dspRange && fabs(nextV) <= _dspRange)
 					DrawLine(TToPx(t - LINE_STEP), VToPx(curV),
 						TToPx(t), VToPx(nextV), VIOLET);
 
