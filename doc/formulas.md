@@ -22,9 +22,7 @@ In the context of this program, there are two arguments that the function accept
 
 ## Numeric literals
 
-To load literal values into the current variable, the number can be written in plain text, base 10. 
-
-**NOTE:** Currently this only works with integer values.
+To load literal values into the current variable, the number can be written in plain text.
 
 ## Operations
 
