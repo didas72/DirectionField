@@ -17,7 +17,7 @@
 //Default settings
 #define DEFAULT_FORMULA "y>t+>y>t-[/"
 #define DEFAULT_PX_WIDTH 512
-#define DEFAULT_SAMPLE_POW 1
+#define DEFAULT_SAMPLE_POW 0
 #define DEFAULT_DRAW_FLAGS DRAW_VECTORS | DRAW_LEFT_EDGE_LINES | DRAW_RIGHT_EDGE_LINES
 #define DEFAULT_DSP_RANGE 1.0
 #define DEFAULT_PRINT_PERF false
@@ -25,6 +25,7 @@
 //Formula settings
 #define MAX_LOCAL_VARS 64
 #define MAX_FORMULA 4096
+#define MAX_FUNCTION_NAME 16
 
 //Vector settings
 #define DRAW_VECTORS 0b1
@@ -231,27 +232,18 @@ void WriteUsageMessage()
 
 bool GetDerivative(double t, double y, double *ret)
 {
-	// ^ pow(2)
-	// { sqrt(1)
-	// $ log(1)
-	// # abs(1)
-	//Maybe factorial
-
-	//Shorthands:
-	// ( sin(1)
-	// ) cos(1)
-	// \ tan(1)
-
 	double vars[MAX_LOCAL_VARS], num, clip;
-	int varHead = 0;
-	int fHead = 0;
+	char functionName[MAX_FUNCTION_NAME + 1];
+	int varHead = 0, formulaHead = 0, funcHead = 0;
 	int decimalCounter = -1;
 
 	char ch;
-	bool lastWasNum = false, lastWasConstant = false;
+	bool lastWasNum = false, lastWasConstant = false, lastWasFunc = false;
 
-	while ((ch = _formula[fHead++]))
+	while ((ch = _formula[formulaHead++]))
 	{
+		iter:
+
 		if (lastWasConstant)
 		{
 			lastWasConstant = false;
@@ -273,6 +265,52 @@ bool GetDerivative(double t, double y, double *ret)
 			}
 
 			continue;
+		}
+		else if (lastWasFunc)
+		{
+			if (isalpha(ch))
+			{
+				functionName[funcHead++] = ch;
+				functionName[funcHead] = '\0';
+				continue;
+			}
+			
+			lastWasFunc = false;
+			funcHead = 0;
+
+			if (!strcmp(functionName, "sin"))			vars[varHead] = sin(vars[varHead]);
+			else if (!strcmp(functionName, "cos"))		vars[varHead] = cos(vars[varHead]);
+			else if (!strcmp(functionName, "tan"))		vars[varHead] = tan(vars[varHead]);
+			else if (!strcmp(functionName, "asin"))		vars[varHead] = asin(vars[varHead]);
+			else if (!strcmp(functionName, "acos"))		vars[varHead] = acos(vars[varHead]);
+			else if (!strcmp(functionName, "atan"))		vars[varHead] = atan(vars[varHead]);
+			else if (!strcmp(functionName, "sinh"))		vars[varHead] = sinh(vars[varHead]);
+			else if (!strcmp(functionName, "cosh"))		vars[varHead] = cosh(vars[varHead]);
+			else if (!strcmp(functionName, "tanh"))		vars[varHead] = tanh(vars[varHead]);
+			else if (!strcmp(functionName, "asinh"))	vars[varHead] = asinh(vars[varHead]);
+			else if (!strcmp(functionName, "acosh"))	vars[varHead] = acosh(vars[varHead]);
+			else if (!strcmp(functionName, "atanh"))	vars[varHead] = atanh(vars[varHead]);
+			else if (!strcmp(functionName, "pow"))
+			{
+				if (varHead <= 0) fprintf(stderr, "BufferHead underflow at character %d.\n", formulaHead);
+				vars[varHead] = pow(vars[varHead - 1], vars[varHead]);
+			}
+			else if (!strcmp(functionName, "abs"))		vars[varHead] = fabs(vars[varHead]);
+			else if (!strcmp(functionName, "ln"))		vars[varHead] = log(vars[varHead]);
+			else if (!strcmp(functionName, "log"))		vars[varHead] = log10(vars[varHead]);
+			else if (!strcmp(functionName, "log2"))		vars[varHead] = log2(vars[varHead]);
+			else if (!strcmp(functionName, "sign"))		vars[varHead] = vars[varHead] == 0.0 ? 0.0 : (vars[varHead] > 0.0 ? 1.0 : -1.0);
+			else if (!strcmp(functionName, "ceil"))		vars[varHead] = ceil(vars[varHead]);
+			else if (!strcmp(functionName, "floor"))	vars[varHead] = floor(vars[varHead]);
+			else if (!strcmp(functionName, "round"))	vars[varHead] = round(vars[varHead]);
+
+			if (vars[varHead] != vars[varHead] || isinf(vars[varHead])) //Check if nan or +-infinity
+				return false;
+
+			//TODO: Sec, Cot, etc
+			//TODO: Optimize: (String,Function*)[], sort by string, binary search string and execute
+
+			//Flow through
 		}
 
 		if (isdigit(ch))
@@ -297,16 +335,20 @@ bool GetDerivative(double t, double y, double *ret)
 			decimalCounter = -1;
 		}
 
-		if (isalpha(ch) && ch != 't' && ch != 'y')
-		{
-			//TODO: Function name, append
-			continue;
-		}
-
 		switch (ch)
 		{
+			//Used chars: ._,;<>[]+*-/^{*#()\		avoid using ! and " because of shell character escaping
+			//Free chars: &'=?@`'|~
+
+			case ' '://NOP
+				break;
+
 			case '_':
 				lastWasConstant = true;
+				break;
+
+			case '=':
+				lastWasFunc = true;
 				break;
 
 			case ',':
@@ -327,49 +369,49 @@ bool GetDerivative(double t, double y, double *ret)
 
 			case '<':
 				varHead--;
-				if (varHead < 0) fprintf(stderr, "BufferHead underflow at character %d.\n", fHead);
+				if (varHead < 0) { fprintf(stderr, "BufferHead underflow at character %d.\n", formulaHead); return false; }
 				break;
 
 			case '>':
 				varHead++;
-				if (varHead >= MAX_LOCAL_VARS) fprintf(stderr, "BufferHead overflow at character %d.\n", fHead);
+				if (varHead >= MAX_LOCAL_VARS) { fprintf(stderr, "BufferHead overflow at character %d.\n", formulaHead); return false; }
 				break;
 
 			case '[':
-				if (varHead <= 0) fprintf(stderr, "BufferHead underflow at character %d.\n", fHead);
+				if (varHead < 0) { fprintf(stderr, "BufferHead underflow at character %d.\n", formulaHead); return false; }
 				vars[varHead - 1] = vars[varHead];
 				varHead--;
 				break;
 
 			case ']':
-				if (varHead + 1 >= MAX_LOCAL_VARS) fprintf(stderr, "BufferHead overflow at character %d.\n", fHead);
+				if (varHead + 1 >= MAX_LOCAL_VARS) { fprintf(stderr, "BufferHead overflow at character %d.\n", formulaHead); return false; }
 				vars[varHead + 1] = vars[varHead];
 				varHead++;
 				break;
 
 			case '+':
-				if (varHead <= 0) fprintf(stderr, "BufferHead underflow at character %d.\n", fHead);
+				if (varHead < 0) { fprintf(stderr, "BufferHead underflow at character %d.\n", formulaHead); return false; }
 				vars[varHead] = vars[varHead - 1] + vars[varHead];
 				break;
 
 			case '-':
-				if (varHead <= 0) fprintf(stderr, "BufferHead underflow at character %d.\n", fHead);
+				if (varHead < 0) { fprintf(stderr, "BufferHead underflow at character %d.\n", formulaHead); return false; }
 				vars[varHead] = vars[varHead - 1] - vars[varHead];
 				break;
 
 			case '*':
-				if (varHead <= 0) fprintf(stderr, "BufferHead underflow at character %d.\n", fHead);
+				if (varHead < 0) { fprintf(stderr, "BufferHead underflow at character %d.\n", formulaHead); return false; }
 				vars[varHead] = vars[varHead - 1] * vars[varHead];
 				break;
 
 			case '/':
-				if (varHead <= 0) fprintf(stderr, "BufferHead underflow at character %d.\n", fHead);
+				if (varHead < 0) { fprintf(stderr, "BufferHead underflow at character %d.\n", formulaHead); return false; }
 				if (vars[varHead] == 0) return false;
 				vars[varHead] = vars[varHead - 1] / vars[varHead];
 				break;
 
 			case '^':
-				if (varHead <= 0) fprintf(stderr, "BufferHead underflow at character %d.\n", fHead);
+				if (varHead < 0) { fprintf(stderr, "BufferHead underflow at character %d.\n", formulaHead); return false; }
 				vars[varHead] = pow(vars[varHead - 1], vars[varHead]);
 				break;
 
@@ -400,15 +442,17 @@ bool GetDerivative(double t, double y, double *ret)
 				break;
 
 			default:
-				printf("ERR: %c\n", ch);
+				printf("Invalid operation: '%c'.\n", ch);
 				break;
 		}
 	}
 
-	if (lastWasNum)
+	if (lastWasNum || lastWasConstant || lastWasFunc)
 	{
-		if (decimalCounter != -1) while(decimalCounter--) num /= 10.0;
-		vars[varHead] = num;
+		ch = ' ';
+		formulaHead--;
+
+		goto iter;
 	}
 
 	*ret = vars[varHead];
