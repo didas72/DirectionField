@@ -2,5 +2,16 @@
 
 A simple direction field visualizer written in C. Made for a very specific use case in Calculus class.
 
-//TODO: Document arguments
-//TODO: Document formula format
+## Formulas
+
+Out of laziness I didn't bother to implement a formula parser, so I made a whole system for executable formulas. It is documentation for it [here](docs/formulas.md).
+
+## Building
+
+**Requirements:**
+- gcc
+- make
+- scc (For LOC)
+
+To build this project yourself, clone the repo and run `make [build]` or `make release`.
+The final binary will be under `build/bin`.

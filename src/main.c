@@ -32,7 +32,7 @@
 #define VECTOR_STEP 0.05
 #define VECTOR_LENGTH 0.02
 #define UNDEF_RADIUS 2.0
-#define FLAT_MARGIN 0.05
+#define FLAT_MARGIN 0.01
 
 //Line settings
 #define DRAW_CENTRAL_LINES 0b10
@@ -64,8 +64,6 @@ Texture renderedTxt;
 int ParseArgs(int argc, char *argv[]);
 void WriteUsageMessage();
 bool GetDerivative(double t, double y, double *ret);
-int TToPx(double spc);
-int VToPx(double spc);
 void GenerateTexture();
 void DrawAxis();
 void DrawVectors();
@@ -232,7 +230,7 @@ void WriteUsageMessage()
 
 bool GetDerivative(double t, double y, double *ret)
 {
-	double vars[MAX_LOCAL_VARS], num, clip;
+	double vars[MAX_LOCAL_VARS], num = 0, clip = 0;
 	char functionName[MAX_FUNCTION_NAME + 1];
 	int varHead = 0, formulaHead = 0, funcHead = 0;
 	int decimalCounter = -1;
@@ -531,7 +529,7 @@ void DrawVectors()
 	{
 		for (double y = -_dspRange; y <= _dspRange; y += VECTOR_STEP)
 		{
-			double a, x, v;
+			double a, x, v = 0;
 			bool valid = GetDerivative(t, y, &v);
 			a = atan(v);
 			x = cos(a) * VECTOR_LENGTH;
@@ -592,7 +590,7 @@ void PlotResult(double bottom, double top, double spacing, double start, double 
 
 		for (double t = start; leftToRight ? t <= end : t >= end; t += s)
 		{
-			double nextV;
+			double nextV = 0;
 			if (!GetDerivative(t - s, curV, &nextV))
 				break;
 
