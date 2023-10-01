@@ -35,6 +35,7 @@ Sym | Argument count | Operation
 \- | 2 | Subtraction (A = B - A)
 \* | 2 | Multiplication (A = B * A)
 / | 2 | Division (A = B / A)
+% | 2 | Remainder (A = B % A)
 ^ | 2 | Power (A = B ^ A)
 \{ | 1 | Square root (A = sqrt(A))
 \$ | 1 | Logarithm base e (A = log_e(A))

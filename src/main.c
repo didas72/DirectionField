@@ -270,6 +270,11 @@ bool GetDerivative(double t, double y, double *ret)
 		{
 			if (isalpha(ch))
 			{
+				if (funcHead >= MAX_FUNCTION_NAME)
+				{
+					fprintf(stderr, "Function name too long at character %d.\n", formulaHead);
+					return false;
+				}
 				functionName[funcHead++] = ch;
 				functionName[funcHead] = '\0';
 				continue;
@@ -303,11 +308,15 @@ bool GetDerivative(double t, double y, double *ret)
 			else if (!strcmp(functionName, "ceil"))		vars[varHead] = ceil(vars[varHead]);
 			else if (!strcmp(functionName, "floor"))	vars[varHead] = floor(vars[varHead]);
 			else if (!strcmp(functionName, "round"))	vars[varHead] = round(vars[varHead]);
+			else
+			{
+				fprintf(stderr, "Invalid function: '%s'.\n", functionName);
+				return false;
+			}
 
 			if (vars[varHead] != vars[varHead] || isinf(vars[varHead])) //Check if nan or +-infinity
 				return false;
 
-			//TODO: Sec, Cot, etc
 			//TODO: Optimize: (String,Function*)[], sort by string, binary search string and execute
 
 			//Flow through
@@ -337,7 +346,7 @@ bool GetDerivative(double t, double y, double *ret)
 
 		switch (ch)
 		{
-			//Used chars: ._,;<>[]+*-/^{*#()\		avoid using ! and " because of shell character escaping
+			//Used chars: ._,;<>[]+*-/^{*#()\%		avoid using ! and " because of shell character escaping
 			//Free chars: &'=?@`'|~
 
 			case ' '://NOP
@@ -410,6 +419,12 @@ bool GetDerivative(double t, double y, double *ret)
 				vars[varHead] = vars[varHead - 1] / vars[varHead];
 				break;
 
+			case '%':
+				if (varHead < 0) { fprintf(stderr, "BufferHead underflow at character %d.\n", formulaHead); return false; }
+				if (vars[varHead] == 0) return false;
+				vars[varHead] = fmod(vars[varHead - 1], vars[varHead]);
+				break;
+
 			case '^':
 				if (varHead < 0) { fprintf(stderr, "BufferHead underflow at character %d.\n", formulaHead); return false; }
 				vars[varHead] = pow(vars[varHead - 1], vars[varHead]);
@@ -443,7 +458,7 @@ bool GetDerivative(double t, double y, double *ret)
 
 			default:
 				printf("Invalid operation: '%c'.\n", ch);
-				break;
+				return false;
 		}
 	}
 
