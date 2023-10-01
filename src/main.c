@@ -11,7 +11,12 @@
 
 #include "raylib/raylib.h"
 
-//TODO: Document args
+//TODO: Document NOPS
+//TODO: Document new instructions
+//TODO: Document no negative literals (use negative '~')
+//TODO: Verify formula before computing
+//TODO: Precompile formula to ints to avoid strcmp and string building
+//TODO: More visualization settings via command line
 //TODO: MAX filter when scaling down
 
 //Default settings
@@ -45,6 +50,8 @@
 
 //Export settings
 #define MAX_PATH 4096
+
+
 
 //Settings
 char _formula[MAX_FORMULA + 1];
@@ -122,10 +129,6 @@ int ParseArgs(int argc, char *argv[])
 		{"sampling",	required_argument,	NULL, 's'},
 		{"export",		required_argument,	NULL, 'e'},
 	};
-
-	//TODO: Variable vector spacing (VECTOR_STEP)
-	//TODO: Variable line spacing (LINE_SPACING)
-	//TODO: Variables for other macros
 
 	while ((opt = getopt_long(argc, argv, "hf:d:w:s:r:pe:", long_options, &optId)) != -1)
 	{
@@ -314,8 +317,6 @@ bool GetDerivative(double t, double y, double *ret)
 
 			if (vars[varHead] != vars[varHead] || isinf(vars[varHead])) //Check if nan or +-infinity
 				return false;
-
-			//TODO: Optimize: (String,Function*)[], sort by string, binary search string and execute
 
 			//Flow through
 		}
