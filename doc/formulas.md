@@ -66,22 +66,22 @@ Op | Args | funcName | Name(s)
 V | 1 | sin | Sine
 V | 1 | cos | Cosine
 V | 1 | tan | Tangent
-| 1 | asin | Inverse sine, arcsin, sin⁻¹
-| 1 | acos | Inverse cosine, arccos, cos⁻¹
-| 1 | atan | Inverse tangent, arctan, tan⁻¹
-| 1 | sinh | Hyperbolic sine
-| 1 | cosh | Hyperbolic cosine
-| 1 | tanh | Hyperbolic tangent
-| 1 | asinh | Inverse hyperbolic sine, arsinh, sinh⁻¹
-| 1 | acosh | Inverse hyperbolic cosine, arcosh, cosh⁻¹
-| 1 | atanh | Inverse hyperbolic tangent, artanh, tanh⁻¹
+X | 1 | asin | Inverse sine, arcsin, sin⁻¹
+X | 1 | acos | Inverse cosine, arccos, cos⁻¹
+X | 1 | atan | Inverse tangent, arctan, tan⁻¹
+X | 1 | sinh | Hyperbolic sine
+X | 1 | cosh | Hyperbolic cosine
+X | 1 | tanh | Hyperbolic tangent
+X | 1 | asinh | Inverse hyperbolic sine, arsinh, sinh⁻¹
+X | 1 | acosh | Inverse hyperbolic cosine, arcosh, cosh⁻¹
+X | 1 | atanh | Inverse hyperbolic tangent, artanh, tanh⁻¹
 V | 1 | abs | Absolute value, modulus
 V | 2 | pow | Exponentiation
 V | 1 | ln | Natural logarithm
-| 1 | log | Decimal logarithm, common logarithm
-| 1 | log2 | Binary logarithm
-| 1 | sign | Sign, signum, sgn
-| 1 | ceil | Ceiling
-| 1 | floor | Floor
-| 1 | round | Round
+X | 1 | log | Decimal logarithm, common logarithm
+X | 1 | log2 | Binary logarithm
+X | 1 | sign | Sign, signum, sgn
+X | 1 | ceil | Ceiling
+X | 1 | floor | Floor
+X | 1 | round | Round
 
