@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <ctype.h>
+#include <string.h>
 
 #include "formulas.h"
 
@@ -19,7 +20,7 @@ bool CompileFormula(const char *src, uint64_t *store)
 	int srcHead = 0, funcHead = 0, storeHead = 0, decimalCounter = -1;
 	bool lastWasLiteral = false, lastWasConstant = false, lastWasFunc = false;
 
-	while ((ch = src[srcHead]))
+	while ((ch = src[srcHead++]))
 	{
 		iter:
 
@@ -114,6 +115,8 @@ bool CompileFormula(const char *src, uint64_t *store)
 				fprintf(stderr, "Variables must be lower case. Invalid variable '%c' at character %d.\n", ch, srcHead);
 				return false;
 			}
+
+			continue;
 		}
 
 		//Operations / shortcut funcs
@@ -231,14 +234,31 @@ bool CompileFormula(const char *src, uint64_t *store)
 	return true;
 }
 
-bool EvaluateFormula(const uint64_t *src, FormulaVariable *variables, size_t variableC, double *ret)
+bool EvaluateFormula(const uint64_t *src, FormulaVariable *variables, int variableC, double *ret)
 {
 	int srcHead = 0, bufferHead = 0;
-	double buffers[MAX_BUFFERS], clip;
+	double buffers[MAX_BUFFERS], clip = 0.0;
 	uint64_t instruction;
 
 	while ((instruction = src[srcHead++]) != FORMULA_RET)
 	{
+		//TODO: Test
+		if (FORMULA_VAR_BASE <= instruction && instruction <= FORMULA_VAR_TOP)
+		{
+			char name = instruction - FORMULA_VAR_BASE + 'a';
+
+			for (int i = 0; i < variableC; i++)
+			{
+				if (variables[i].name == name)
+				{
+					buffers[bufferHead] = variables[i].value;
+					break;
+				}
+			}
+
+			continue;
+		}
+
 		switch (instruction)
 		{
 			case FORMULA_NOP: break;
@@ -288,8 +308,168 @@ bool EvaluateFormula(const uint64_t *src, FormulaVariable *variables, size_t var
 				}
 				buffers[bufferHead] = buffers[bufferHead - 1];
 				break;
+
+			case FORMULA_ADD:
+				if (bufferHead < 1)
+				{
+					fprintf(stderr, "BufferHead underflow at instruction %d.\n", srcHead);
+					return false;
+				}
+				buffers[bufferHead] = buffers[bufferHead - 1] + buffers[bufferHead];
+				break;
+
+			case FORMULA_SUBTRACT:
+				if (bufferHead < 1)
+				{
+					fprintf(stderr, "BufferHead underflow at instruction %d.\n", srcHead);
+					return false;
+				}
+				buffers[bufferHead] = buffers[bufferHead - 1] - buffers[bufferHead];
+				break;
+
+			case FORMULA_MULTIPLY:
+				if (bufferHead < 1)
+				{
+					fprintf(stderr, "BufferHead underflow at instruction %d.\n", srcHead);
+					return false;
+				}
+				buffers[bufferHead] = buffers[bufferHead - 1] * buffers[bufferHead];
+				break;
+
+			case FORMULA_DIVIDE:
+				if (bufferHead < 1)
+				{
+					fprintf(stderr, "BufferHead underflow at instruction %d.\n", srcHead);
+					return false;
+				}
+				buffers[bufferHead] = buffers[bufferHead - 1] / buffers[bufferHead];
+				break;
+
+			case FORMULA_REMAINDER:
+				if (bufferHead < 1)
+				{
+					fprintf(stderr, "BufferHead underflow at instruction %d.\n", srcHead);
+					return false;
+				}
+				buffers[bufferHead] = fmod(buffers[bufferHead - 1], buffers[bufferHead]);
+				break;
+
+			case FORMULA_POW:
+				if (bufferHead < 1)
+				{
+					fprintf(stderr, "BufferHead underflow at instruction %d.\n", srcHead);
+					return false;
+				}
+				buffers[bufferHead] = pow(buffers[bufferHead - 1], buffers[bufferHead]);
+				break;
+
+			case FORMULA_SQUARE:
+				buffers[bufferHead] *= buffers[bufferHead];
+				break;
+
+			case FORMULA_SQRT:
+				buffers[bufferHead] = sqrt(buffers[bufferHead]);
+				break;
+
+			case FORMULA_LOGN:
+				buffers[bufferHead] = log(buffers[bufferHead]);
+				break;
+
+			case FORMULA_LOGD:
+				buffers[bufferHead] = log10(buffers[bufferHead]);
+				break;
+
+			case FORMULA_LOGB:
+				buffers[bufferHead] = log2(buffers[bufferHead]);
+				break;
+
+			case FORMULA_ABS:
+				buffers[bufferHead] = fabs(buffers[bufferHead]);
+				break;
+
+			case FORMULA_SIN:
+				buffers[bufferHead] = sin(buffers[bufferHead]);
+				break;
+
+			case FORMULA_COS:
+				buffers[bufferHead] = cos(buffers[bufferHead]);
+				break;
+
+			case FORMULA_TAN:
+				buffers[bufferHead] = tan(buffers[bufferHead]);
+				break;
+
+			case FORMULA_ASIN:
+				buffers[bufferHead] = asin(buffers[bufferHead]);
+				break;
+
+			case FORMULA_ACOS:
+				buffers[bufferHead] = acos(buffers[bufferHead]);
+				break;
+
+			case FORMULA_ATAN:
+				buffers[bufferHead] = atan(buffers[bufferHead]);
+				break;
+
+			case FORMULA_SINH:
+				buffers[bufferHead] = sinh(buffers[bufferHead]);
+				break;
+
+			case FORMULA_COSH:
+				buffers[bufferHead] = cosh(buffers[bufferHead]);
+				break;
+
+			case FORMULA_TANH:
+				buffers[bufferHead] = tanh(buffers[bufferHead]);
+				break;
+
+			case FORMULA_ASINH:
+				buffers[bufferHead] = asinh(buffers[bufferHead]);
+				break;
+
+			case FORMULA_ACOSH:
+				buffers[bufferHead] = acosh(buffers[bufferHead]);
+				break;
+
+			case FORMULA_ATANH:
+				buffers[bufferHead] = atanh(buffers[bufferHead]);
+				break;
+
+			case FORMULA_SIGN:
+				buffers[bufferHead] = 
+					buffers[bufferHead] == 0.0 ? 0.0 :
+					(buffers[bufferHead] > 0.0 ? 1.0 : - 1.0);
+				break;
+
+			case FORMULA_CEIL:
+				buffers[bufferHead] = ceil(buffers[bufferHead]);
+				break;
+
+			case FORMULA_FLOOR:
+				buffers[bufferHead] = floor(buffers[bufferHead]);
+				break;
+
+			case FORMULA_ROUND:
+				buffers[bufferHead] = round(buffers[bufferHead]);
+				break;
+
+			case FORMULA_NEGATIVE:
+				buffers[bufferHead] = -buffers[bufferHead];
+				break;
+
+			case FORMULA_RET://Should never get here
+				fprintf(stderr, "Unexpected return at instruction %d.\n", srcHead);
+				return false;
+
+			default:
+				fprintf(stderr, "Invalid instruction %ld at index %d.\n", src[srcHead], srcHead);
+				return false;
 		}
 	}
+
+	//Check if nan or +-infinity
+	if (buffers[bufferHead] != buffers[bufferHead] ||
+		isinf(buffers[bufferHead])) return false;
 
 	*ret = buffers[bufferHead];
 	return true;
@@ -313,12 +493,13 @@ static bool GetFunctionCode(const char *name, uint64_t *store, int srcHead)
 	else if (!strcmp(name, "pow"))		*store = FORMULA_POW;
 	else if (!strcmp(name, "abs"))		*store = FORMULA_ABS;
 	else if (!strcmp(name, "ln"))		*store = FORMULA_LOGN;
-	else if (!strcmp(name, "log"))		*store = FORMULA_LOG10;
-	else if (!strcmp(name, "log2"))		*store = FORMULA_LOG2;
+	else if (!strcmp(name, "log"))		*store = FORMULA_LOGD;
+	else if (!strcmp(name, "logb"))		*store = FORMULA_LOGB;
 	else if (!strcmp(name, "sign"))		*store = FORMULA_SIGN;
 	else if (!strcmp(name, "ceil"))		*store = FORMULA_CEIL;
 	else if (!strcmp(name, "floor"))	*store = FORMULA_FLOOR;
 	else if (!strcmp(name, "round"))	*store = FORMULA_ROUND;
+	else if (!strcmp(name, "sqrt"))		*store = FORMULA_SQRT;
 	else
 	{
 		fprintf(stderr, "Invalid function '%s' at character %d.\n", name, srcHead);

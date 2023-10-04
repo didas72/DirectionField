@@ -11,13 +11,12 @@
 
 #include "raylib/raylib.h"
 
-//TODO: Document NOPS
-//TODO: Document new instructions
-//TODO: Document no negative literals (use negative '~')
+#include "formulas.h"
+
 //TODO: Verify formula before computing
-//TODO: Precompile formula to ints to avoid strcmp and string building
 //TODO: More visualization settings via command line
 //TODO: MAX filter when scaling down
+//FIXME: Slanted texture display when unknown condition
 
 //Default settings
 #define DEFAULT_FORMULA "y>t+>y>t-[/"
@@ -28,9 +27,8 @@
 #define DEFAULT_PRINT_PERF false
 
 //Formula settings
-#define MAX_LOCAL_VARS 64
 #define MAX_FORMULA 4096
-#define MAX_FUNCTION_NAME 16
+#define MAX_FORMULA_SRC MAX_FORMULA * MAX_FUNCTION_NAME
 
 //Vector settings
 #define DRAW_VECTORS 0b1
@@ -54,7 +52,7 @@
 
 
 //Settings
-char _formula[MAX_FORMULA + 1];
+uint64_t _compiledFormula[MAX_FORMULA];
 unsigned char _drawFlags;
 int _pxWidth;
 int _samplePow, _sampleMult;
@@ -63,8 +61,7 @@ bool printPerf;
 char _exportPath[MAX_PATH + 1];
 
 //Other globals
-Image renderedImg;
-Texture renderedTxt;
+Texture _renderedTxt;
 
 
 
@@ -72,16 +69,17 @@ int ParseArgs(int argc, char *argv[]);
 void WriteUsageMessage();
 bool GetDerivative(double t, double y, double *ret);
 void GenerateTexture();
-void DrawAxis();
-void DrawVectors();
-void DrawLines();
-void PlotResult(double bottom, double top, double spacing, double left, double right, double step, Color color);
+void DrawAxis(Image *img);
+void DrawVectors(Image *img);
+void DrawLines(Image *img);
+void PlotResult(Image *img, double bottom, double top, double spacing, double left, double right, double step, Color color);
 
 
 
 int main(int argc, char *argv[])
 {
 	int ret = ParseArgs(argc, argv);
+	if (ret == ~0) return 0;
 	if (ret) return ret;
 
 	SetTraceLogLevel(LOG_NONE);
@@ -98,8 +96,9 @@ int main(int argc, char *argv[])
 
 	while (!WindowShouldClose())
 	{
+		ClearBackground(BLACK);
 		BeginDrawing();
-		DrawTextureEx(renderedTxt, zero, 0, 1.0/* / _sampleMult*/, WHITE);
+		DrawTextureEx(_renderedTxt, zero, 0.0, 1.0, WHITE);
 		EndDrawing();
 	}
 
@@ -110,13 +109,15 @@ int ParseArgs(int argc, char *argv[])
 {
 	int opt, optId;
 
+	char source[MAX_FORMULA_SRC + 1];
+
 	//Init defaults
 	_drawFlags = DEFAULT_DRAW_FLAGS;
 	_pxWidth = DEFAULT_PX_WIDTH;
 	_samplePow = DEFAULT_SAMPLE_POW;
 	_dspRange = DEFAULT_DSP_RANGE;
 	printPerf = DEFAULT_PRINT_PERF;
-	strcpy(_formula, DEFAULT_FORMULA);
+	strcpy(source, DEFAULT_FORMULA);
 	strcpy(_exportPath, "");
 
 	static struct option long_options[] = {
@@ -136,7 +137,7 @@ int ParseArgs(int argc, char *argv[])
 		{
 			case 'h':
 				WriteUsageMessage();
-				break;
+				return ~0;
 
 			case 'f':
 				if (strlen(optarg) > MAX_FORMULA)
@@ -144,8 +145,8 @@ int ParseArgs(int argc, char *argv[])
 					fprintf(stderr, "Formula is too long. Max allowed length is %d.\n", MAX_FORMULA);
 					return -1;
 				}
-				strcpy(_formula, optarg);
-				printf("Loaded formula '%s'.\n", _formula);
+				strcpy(source, optarg);
+				printf("Loaded formula '%s'.\n", source);
 				break;
 
 			case 'd':
@@ -213,6 +214,11 @@ int ParseArgs(int argc, char *argv[])
 	}
 
 	_sampleMult = 1 << _samplePow;
+	if (!CompileFormula(source, _compiledFormula))
+	{
+		fprintf(stderr, "Formula compilation failed.\n");	
+		return 2;
+	}
 
 	return 0;
 }
@@ -226,252 +232,19 @@ void WriteUsageMessage()
 		"\t-w, --width <width>\n\t\tSpecifies what the window width should be. The window is aways square. Must be between 1 and 4096 inclusive.\n"
 		"\t-r, --range <range>\n\t\tSpecifies what number range to use when drawing. Interval will be [-range,range]. Must be between 0.001 and 1000.\n"
 		"\t-p, --performance\n\t\tEnables printing of performance metrics.\n"
-		"\t-s, --sampling <mult>\n\t\tSpecifies what sampling power to use when rendering. Must be between 0 and 8 inclusive.\n");
+		"\t-s, --sampling <mult>\n\t\tSpecifies what sampling power to use when rendering. Must be between 0 and 8 inclusive.\n"
+		"\t-e, --export <path>\n\t\tSpecifies that the resuting image is to be exported to the given path.\n");
 }
 
 
 
 bool GetDerivative(double t, double y, double *ret)
 {
-	double vars[MAX_LOCAL_VARS], num = 0, clip = 0;
-	char functionName[MAX_FUNCTION_NAME + 1];
-	int varHead = 0, formulaHead = 0, funcHead = 0;
-	int decimalCounter = -1;
+	FormulaVariable vars[2] = {
+		{ .name = 't', .value = t }, 
+		{ .name = 'y', .value = y }};
 
-	char ch;
-	bool lastWasNum = false, lastWasConstant = false, lastWasFunc = false;
-
-	while ((ch = _formula[formulaHead++]))
-	{
-		iter:
-
-		if (lastWasConstant)
-		{
-			lastWasConstant = false;
-			
-			switch (ch)
-			{
-				case 'e':
-					vars[varHead] = M_E;
-					break;
-
-				case 'p':
-					vars[varHead] = M_PI;
-					break;
-
-				default:
-					fprintf(stderr, "Invalid constant '%c'.\n", ch);
-					exit(-1);
-					break;
-			}
-
-			continue;
-		}
-		else if (lastWasFunc)
-		{
-			if (isalpha(ch))
-			{
-				if (funcHead >= MAX_FUNCTION_NAME)
-				{
-					fprintf(stderr, "Function name too long at character %d.\n", formulaHead);
-					return false;
-				}
-				functionName[funcHead++] = ch;
-				functionName[funcHead] = '\0';
-				continue;
-			}
-			
-			lastWasFunc = false;
-			funcHead = 0;
-
-			if (!strcmp(functionName, "sin"))			vars[varHead] = sin(vars[varHead]);
-			else if (!strcmp(functionName, "cos"))		vars[varHead] = cos(vars[varHead]);
-			else if (!strcmp(functionName, "tan"))		vars[varHead] = tan(vars[varHead]);
-			else if (!strcmp(functionName, "asin"))		vars[varHead] = asin(vars[varHead]);
-			else if (!strcmp(functionName, "acos"))		vars[varHead] = acos(vars[varHead]);
-			else if (!strcmp(functionName, "atan"))		vars[varHead] = atan(vars[varHead]);
-			else if (!strcmp(functionName, "sinh"))		vars[varHead] = sinh(vars[varHead]);
-			else if (!strcmp(functionName, "cosh"))		vars[varHead] = cosh(vars[varHead]);
-			else if (!strcmp(functionName, "tanh"))		vars[varHead] = tanh(vars[varHead]);
-			else if (!strcmp(functionName, "asinh"))	vars[varHead] = asinh(vars[varHead]);
-			else if (!strcmp(functionName, "acosh"))	vars[varHead] = acosh(vars[varHead]);
-			else if (!strcmp(functionName, "atanh"))	vars[varHead] = atanh(vars[varHead]);
-			else if (!strcmp(functionName, "pow"))
-			{
-				if (varHead <= 0) fprintf(stderr, "BufferHead underflow at character %d.\n", formulaHead);
-				vars[varHead] = pow(vars[varHead - 1], vars[varHead]);
-			}
-			else if (!strcmp(functionName, "abs"))		vars[varHead] = fabs(vars[varHead]);
-			else if (!strcmp(functionName, "ln"))		vars[varHead] = log(vars[varHead]);
-			else if (!strcmp(functionName, "log"))		vars[varHead] = log10(vars[varHead]);
-			else if (!strcmp(functionName, "log2"))		vars[varHead] = log2(vars[varHead]);
-			else if (!strcmp(functionName, "sign"))		vars[varHead] = vars[varHead] == 0.0 ? 0.0 : (vars[varHead] > 0.0 ? 1.0 : -1.0);
-			else if (!strcmp(functionName, "ceil"))		vars[varHead] = ceil(vars[varHead]);
-			else if (!strcmp(functionName, "floor"))	vars[varHead] = floor(vars[varHead]);
-			else if (!strcmp(functionName, "round"))	vars[varHead] = round(vars[varHead]);
-			else
-			{
-				fprintf(stderr, "Invalid function: '%s'.\n", functionName);
-				return false;
-			}
-
-			if (vars[varHead] != vars[varHead] || isinf(vars[varHead])) //Check if nan or +-infinity
-				return false;
-
-			//Flow through
-		}
-
-		if (isdigit(ch))
-		{
-			if (!lastWasNum) { num = ch - '0'; }
-			else { num *= 10; num += ch - '0'; }
-			if (decimalCounter != -1) decimalCounter++;
-			lastWasNum = true;
-			continue;
-		}
-		else if (ch == '.' && lastWasNum)
-		{
-			decimalCounter = 0;
-			continue;
-		}
-		else if (lastWasNum)
-		{
-			if (decimalCounter != -1) while(decimalCounter--) num /= 10.0;
-
-			vars[varHead] = num;
-			lastWasNum = false;
-			decimalCounter = -1;
-		}
-
-		switch (ch)
-		{
-			//Used chars: ._,;<>[]+*-/^{*#()\%		avoid using ! and " because of shell character escaping
-			//Free chars: &'=?@`'|~
-
-			case ' '://NOP
-				break;
-
-			case '_':
-				lastWasConstant = true;
-				break;
-
-			case '=':
-				lastWasFunc = true;
-				break;
-
-			case ',':
-				clip = vars[varHead];
-				break;
-
-			case ';':
-				vars[varHead] = clip;
-				break;
-
-			case 't':
-				vars[varHead] = t;
-				break;
-
-			case 'y':
-				vars[varHead] = y;
-				break;
-
-			case '<':
-				varHead--;
-				if (varHead < 0) { fprintf(stderr, "BufferHead underflow at character %d.\n", formulaHead); return false; }
-				break;
-
-			case '>':
-				varHead++;
-				if (varHead >= MAX_LOCAL_VARS) { fprintf(stderr, "BufferHead overflow at character %d.\n", formulaHead); return false; }
-				break;
-
-			case '[':
-				if (varHead < 0) { fprintf(stderr, "BufferHead underflow at character %d.\n", formulaHead); return false; }
-				vars[varHead - 1] = vars[varHead];
-				varHead--;
-				break;
-
-			case ']':
-				if (varHead + 1 >= MAX_LOCAL_VARS) { fprintf(stderr, "BufferHead overflow at character %d.\n", formulaHead); return false; }
-				vars[varHead + 1] = vars[varHead];
-				varHead++;
-				break;
-
-			case '+':
-				if (varHead < 0) { fprintf(stderr, "BufferHead underflow at character %d.\n", formulaHead); return false; }
-				vars[varHead] = vars[varHead - 1] + vars[varHead];
-				break;
-
-			case '-':
-				if (varHead < 0) { fprintf(stderr, "BufferHead underflow at character %d.\n", formulaHead); return false; }
-				vars[varHead] = vars[varHead - 1] - vars[varHead];
-				break;
-
-			case '*':
-				if (varHead < 0) { fprintf(stderr, "BufferHead underflow at character %d.\n", formulaHead); return false; }
-				vars[varHead] = vars[varHead - 1] * vars[varHead];
-				break;
-
-			case '/':
-				if (varHead < 0) { fprintf(stderr, "BufferHead underflow at character %d.\n", formulaHead); return false; }
-				if (vars[varHead] == 0) return false;
-				vars[varHead] = vars[varHead - 1] / vars[varHead];
-				break;
-
-			case '%':
-				if (varHead < 0) { fprintf(stderr, "BufferHead underflow at character %d.\n", formulaHead); return false; }
-				if (vars[varHead] == 0) return false;
-				vars[varHead] = fmod(vars[varHead - 1], vars[varHead]);
-				break;
-
-			case '^':
-				if (varHead < 0) { fprintf(stderr, "BufferHead underflow at character %d.\n", formulaHead); return false; }
-				vars[varHead] = pow(vars[varHead - 1], vars[varHead]);
-				break;
-
-			case '{':
-				if (vars[varHead] < 0) return false;
-				vars[varHead] = sqrt(vars[varHead]);
-				break;
-
-			case '$':
-				if (vars[varHead] <= 0) return false;
-				vars[varHead] = log(vars[varHead]);
-				break;
-
-			case '#':
-				vars[varHead] = fabs(vars[varHead]);
-				break;
-
-			case '(':
-				vars[varHead] = sin(vars[varHead]);
-				break;
-
-			case ')':
-				vars[varHead] = cos(vars[varHead]);
-				break;
-
-			case '\\':
-				vars[varHead] = tan(vars[varHead]);
-				break;
-
-			default:
-				printf("Invalid operation: '%c'.\n", ch);
-				return false;
-		}
-	}
-
-	if (lastWasNum || lastWasConstant || lastWasFunc)
-	{
-		ch = ' ';
-		formulaHead--;
-
-		goto iter;
-	}
-
-	*ret = vars[varHead];
-
-	return true;
+	return EvaluateFormula(_compiledFormula, vars, 2, ret);
 }
 
 
@@ -489,12 +262,12 @@ int VToPx(double spc)
 
 void GenerateTexture()
 {
-	renderedImg = GenImageColor(_pxWidth * _sampleMult, _pxWidth * _sampleMult, BLACK);
+	Image renderedImg = GenImageColor(_pxWidth * _sampleMult, _pxWidth * _sampleMult, BLACK);
 
 	clock_t start = clock(), diff;
-	DrawAxis();
-	DrawVectors();
-	DrawLines();
+	DrawAxis(&renderedImg);
+	DrawVectors(&renderedImg);
+	DrawLines(&renderedImg);
 	diff = clock() - start;
 
 	if (strlen(_exportPath)) ExportImage(renderedImg, _exportPath);
@@ -509,17 +282,17 @@ void GenerateTexture()
 		ImageColorContrast(&renderedImg, 30);
 	}
 	
-	renderedTxt = LoadTextureFromImage(renderedImg);
+	_renderedTxt = LoadTextureFromImage(renderedImg);
 	UnloadImage(renderedImg);
 
 	if (printPerf) printf("Total time elapsed: %.2fms.\n", diff * 1000.0 / CLOCKS_PER_SEC);
 }
-void DrawAxis()
+void DrawAxis(Image *img)
 {
-	ImageDrawLine(&renderedImg, _pxWidth * _sampleMult / 2, 0, _pxWidth * _sampleMult / 2, _pxWidth * _sampleMult, GRAY);
-	ImageDrawLine(&renderedImg, 0, _pxWidth * _sampleMult / 2, _pxWidth * _sampleMult, _pxWidth * _sampleMult / 2, GRAY);
+	ImageDrawLine(img, _pxWidth * _sampleMult / 2, 0, _pxWidth * _sampleMult / 2, _pxWidth * _sampleMult, GRAY);
+	ImageDrawLine(img, 0, _pxWidth * _sampleMult / 2, _pxWidth * _sampleMult, _pxWidth * _sampleMult / 2, GRAY);
 }
-void DrawVectors()
+void DrawVectors(Image *img)
 {
 	if (!(_drawFlags & DRAW_VECTORS))
 		return;
@@ -544,11 +317,11 @@ void DrawVectors()
 			if (valid)
 			{
 				v *= VECTOR_LENGTH; x *= VECTOR_LENGTH;
-				ImageDrawLine(&renderedImg, cornerX, cornerY, tipX, tipY, fabs(a) < FLAT_MARGIN ? GRAY : GREEN);
+				ImageDrawLine(img, cornerX, cornerY, tipX, tipY, fabs(a) < FLAT_MARGIN ? GRAY : GREEN);
 			}
 			else
 			{
-				ImageDrawCircle(&renderedImg, cornerX, cornerY, UNDEF_RADIUS, RED);
+				ImageDrawCircle(img, cornerX, cornerY, UNDEF_RADIUS, RED);
 			}
 		}
 	}
@@ -556,22 +329,22 @@ void DrawVectors()
 	diff = clock() - start;
 	if (printPerf) printf("Vectors time elapsed: %.2fms.\n", diff * 1000.0 / CLOCKS_PER_SEC);
 }
-void DrawLines()
+void DrawLines(Image *img)
 {
 	clock_t start = clock(), diff;
 
 	if (_drawFlags & DRAW_CENTRAL_LINES)
 	{
-		PlotResult(-_dspRange - LINE_RANGE_EXTEND, _dspRange + LINE_RANGE_EXTEND, LINE_SPACING,
+		PlotResult(img, -_dspRange - LINE_RANGE_EXTEND, _dspRange + LINE_RANGE_EXTEND, LINE_SPACING,
 			LINE_STEP, _dspRange + LINE_STEP, LINE_STEP, SKYBLUE);
-		PlotResult(-_dspRange - LINE_RANGE_EXTEND, _dspRange + LINE_RANGE_EXTEND, LINE_SPACING,
+		PlotResult(img, -_dspRange - LINE_RANGE_EXTEND, _dspRange + LINE_RANGE_EXTEND, LINE_SPACING,
 			0, -_dspRange - LINE_STEP, LINE_STEP, SKYBLUE);
 	}
 	if (_drawFlags & DRAW_RIGHT_EDGE_LINES)
-		PlotResult(-_dspRange - LINE_RANGE_EXTEND, _dspRange + LINE_RANGE_EXTEND, LINE_SPACING,
+		PlotResult(img, -_dspRange - LINE_RANGE_EXTEND, _dspRange + LINE_RANGE_EXTEND, LINE_SPACING,
 			_dspRange + LINE_STEP, 0, LINE_STEP, ORANGE);
 	if (_drawFlags & DRAW_LEFT_EDGE_LINES)
-		PlotResult(-_dspRange - LINE_RANGE_EXTEND, _dspRange + LINE_RANGE_EXTEND, LINE_SPACING,
+		PlotResult(img, -_dspRange - LINE_RANGE_EXTEND, _dspRange + LINE_RANGE_EXTEND, LINE_SPACING,
 			-_dspRange - LINE_STEP, 0, LINE_STEP, VIOLET);
 
 	diff = clock() - start;
@@ -580,7 +353,7 @@ void DrawLines()
 
 
 
-void PlotResult(double bottom, double top, double spacing, double start, double end, double step, Color color)
+void PlotResult(Image *img, double bottom, double top, double spacing, double start, double end, double step, Color color)
 {
 	bool leftToRight = start < end;
 	double s = step * (leftToRight ? 1 : -1) / _sampleMult;
@@ -601,7 +374,7 @@ void PlotResult(double bottom, double top, double spacing, double start, double 
 			nextV = nextV * s + curV;
 			
 			if (fabs(curV) <= _dspRange && fabs(nextV) <= _dspRange)
-				ImageDrawLine(&renderedImg, TToPx(t - s), VToPx(curV),
+				ImageDrawLine(img, TToPx(t - s), VToPx(curV),
 					TToPx(t), VToPx(nextV), color);
 
 			curV = nextV;

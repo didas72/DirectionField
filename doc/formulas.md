@@ -22,7 +22,7 @@ In the context of this program, there are two arguments that the function accept
 
 ## Numeric literals
 
-To load literal values into the current variable, the number can be written in plain text.
+To load literal values into the current variable, the number can be written in plain text. To write negative literals, append the 'negative' operation '~'.
 
 ## Operations
 
@@ -38,11 +38,15 @@ Sym | Argument count | Operation
 % | 2 | Remainder (A = B % A)
 ^ | 2 | Power (A = B ^ A)
 \{ | 1 | Square root (A = sqrt(A))
+\} | 1 | Square (A = A * A)
 \$ | 1 | Logarithm base e (A = log_e(A))
 \# | 1 | Absolute (A = \|A\|)
 ( | 1 | Sine (A = sin(A))
 ) | 1 | Cosine (A = cos(A))
 \\ | 1 | Tangent (A = tan(A))
+~ | 1 | Negative (A = -A)
+
+**Note**: All whitespace characters are ignored.
 
 ## Constants
 
@@ -80,9 +84,10 @@ V | 1 | abs | Absolute value, modulus
 V | 2 | pow | Exponentiation
 V | 1 | ln | Natural logarithm
 X | 1 | log | Decimal logarithm, common logarithm
-X | 1 | log2 | Binary logarithm
+X | 1 | logb | Binary logarithm
 X | 1 | sign | Sign, signum, sgn
 X | 1 | ceil | Ceiling
 X | 1 | floor | Floor
 X | 1 | round | Round
+V | 1 | sqrt | Square root
 
