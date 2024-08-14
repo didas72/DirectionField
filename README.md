@@ -4,7 +4,7 @@ A simple direction field visualizer written in C. Made for a very specific use c
 
 ## Formulas
 
-Out of laziness I didn't bother to implement a formula parser, so I made a whole system for executable formulas. It is documentation for it [here](docs/formulas.md).
+Out of laziness I didn't bother to implement a formula parser, so I made a whole system for executable formulas. The documentation for it is [here](docs/formulas.md).
 
 ## Building
 
