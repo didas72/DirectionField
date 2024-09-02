@@ -26,7 +26,7 @@ To load literal values into the current variable, the number can be written in p
 
 ## Operations
 
-All operations take either one (A) or two (B, A) arguments, these being `B = Buffers\[BufferHead-1\]` and `A = Buffers\[BufferHead\]`.
+All operations take either one (A) or two (B, A) arguments, these being `B = Buffers[BufferHead-1]` and `A = Buffers[BufferHead]`.
 
 The currently defined operations are:
 Sym | Argument count | Operation

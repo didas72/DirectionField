@@ -5,8 +5,6 @@ SRC=src
 TEST=tests
 OBJ=build/obj
 BIN=build/bin
-INC=include
-LIB=libs
 DEPS=raylib
 
 OUTBIN=$(BIN)/dfv
@@ -28,11 +26,11 @@ run: $(OUTBIN)
 
 $(OUTBIN): $(OBJS)
 	@mkdir -p $(@D)
-	$(CC) $(C_FLAGS) $^ -L$(LIB) $(DEP_LST) -lm -o $@
+	$(CC) $(C_FLAGS) $^ $(DEP_LST) -lm -o $@
 
 $(OBJ)/%.o: $(SRC)/%.c
 	@mkdir -p $(@D)
-	$(CC) $(C_FLAGS) -c $< -o $@ -I$(INC)
+	$(CC) $(C_FLAGS) -c $< -o $@
 
 
 
