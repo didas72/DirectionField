@@ -100,7 +100,7 @@ bool CompileFormula(const char *src, uint64_t *store)
 
 				store[storeHead++] = FORMULA_LITERAL;
 				((double *)store)[storeHead++] = literalNum;
-				decimalCounter = false;
+				lastWasLiteral = false;
 				decimalCounter = -1;
 			}
 		}

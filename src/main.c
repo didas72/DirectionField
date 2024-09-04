@@ -9,7 +9,7 @@
 #include <errno.h>
 #include <time.h>
 
-#include "raylib/raylib.h"
+#include "raylib.h"
 
 #include "formulas.h"
 
@@ -220,6 +220,14 @@ int ParseArgs(int argc, char *argv[])
 		return 2;
 	}
 
+	/*for (int i = 0; i < MAX_FORMULA; i++)
+	{
+		if (_compiledFormula[i] == FORMULA_RET) break;
+		if (_compiledFormula[i] > 0x10000) printf("Formula[%d]: %lf\n", i, ((double*)_compiledFormula)[i]);
+		else if (_compiledFormula[i] > 0x1000) printf("Formula[%d]: %c\n", i, _compiledFormula[i] - FORMULA_VAR_BASE + 'a');
+		else printf("Formula[%d]: %ld\n", i, _compiledFormula[i]);
+	}*/
+
 	return 0;
 }
 
@@ -317,7 +325,7 @@ void DrawVectors(Image *img)
 			if (valid)
 			{
 				v *= VECTOR_LENGTH; x *= VECTOR_LENGTH;
-				ImageDrawLine(img, cornerX, cornerY, tipX, tipY, fabs(a) < FLAT_MARGIN ? GRAY : GREEN);
+				ImageDrawLine(img, cornerX, cornerY, tipX, tipY, fabs(a) < FLAT_MARGIN ? RED : GREEN);
 			}
 			else
 			{

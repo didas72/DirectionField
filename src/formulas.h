@@ -50,7 +50,7 @@
 #define FORMULA_ROUND			36
 #define FORMULA_NEGATIVE		37
 #define FORMULA_VAR_BASE		0x1000
-#define FORMULA_VAR_TOP			FORMULA_VAR_BASE + 'z' - 'a'
+#define FORMULA_VAR_TOP			(FORMULA_VAR_BASE + 'z' - 'a')
 #define FORMULA_RET				~0ul
 
 
